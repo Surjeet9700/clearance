@@ -42,6 +42,45 @@ export async function setRules(patch: Partial<Omit<RuleSet, 'spent_this_month_ce
   return next
 }
 
+// ---- rubber-stamp guard (Lee & See calibrated trust; arXiv 2605.19151) ----
+// If the human approves nearly everything and never undoes, approvals are becoming
+// automatic motor behavior - the gate stops protecting anyone. We surface the
+// approve-rate so the UI can inject friction before that happens.
+export type ApprovalStats = {
+  total: number
+  approved: number
+  rejected: number
+  undos: number
+  approve_rate: number // 0..1 over decided cards; 1 = rubber-stamping risk
+}
+
+export async function approvalStats(): Promise<ApprovalStats> {
+  const db = await getDB()
+  const { rows } = await db.query<{ v: string }>("SELECT v FROM kv WHERE k LIKE 'approval:%'")
+  let approved = 0, rejected = 0, undos = 0
+  for (const r of rows) {
+    const a = JSON.parse(r.v) as { decision: boolean }
+    if (a.decision) approved++
+    else rejected++
+  }
+  const recs = await listReceipts(100)
+  for (const r of recs) if (r.kind === 'undo' && r.reasoning?.includes('Human reversed')) undos++
+  const total = approved + rejected
+  return {
+    total,
+    approved,
+    rejected,
+    undos,
+    approve_rate: total === 0 ? 0 : approved / total,
+  }
+}
+
+export async function recordApprovalDecision(decision: boolean): Promise<void> {
+  const db = await getDB()
+  const id = `approval:${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  await db.query('INSERT INTO kv (k, v) VALUES ($1, $2)', [id, JSON.stringify({ decision, ts: Date.now() })])
+}
+
 // ---- The decision engine. Returns what the tool layer acts on. ----
 export type GateVerdict =
   | { action: 'auto_execute'; reason: string; rule: string }

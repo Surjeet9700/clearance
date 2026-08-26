@@ -14,6 +14,7 @@ export type Product = {
   rating: number
   stock: number
   blurb: string
+  img?: string
 }
 
 export type RuleSet = {
@@ -45,29 +46,44 @@ async function init(db: PGlite) {
     CREATE TABLE IF NOT EXISTS products (
       id SERIAL PRIMARY KEY, name TEXT NOT NULL, brand TEXT NOT NULL,
       category TEXT NOT NULL, price_cents INT NOT NULL, rating REAL NOT NULL,
-      stock INT NOT NULL, blurb TEXT NOT NULL
+      stock INT NOT NULL, blurb TEXT NOT NULL, img TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS cart_items (
       id SERIAL PRIMARY KEY, product_id INT NOT NULL REFERENCES products(id), qty INT NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS reviews (
+      id SERIAL PRIMARY KEY, product_id INT NOT NULL REFERENCES products(id),
+      author TEXT NOT NULL, rating REAL NOT NULL, text TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
   `)
   const { rows } = await db.query<{ c: string }>('SELECT COUNT(*)::text AS c FROM products')
   if (rows[0]?.c === '0') {
     await db.exec(`
-      INSERT INTO products (name, brand, category, price_cents, rating, stock, blurb) VALUES
-      ('AeroRun Glide 5','Velocity','running',12900,4.6,12,'Daily trainer with plush foam, 8oz'),
-      ('TrailBeast GTX','Summit','outdoor',17900,4.4,7,'Waterproof trail runner, aggressive grip'),
-      ('Cloudstep Classic','Nimbus','casual',8900,4.2,20,'Minimalist leather sneaker'),
-      ('PowerLift Pro','IronCore','gym',13900,4.7,9,'Flat-sole lifting shoe, wide toe box'),
-      ('SprintEdge Carbon','Velocity','running',24900,4.8,4,'Carbon-plated race day shoe'),
-      ('CourtKing 2','Rally','court',10900,4.1,15,'Indoor court shoe with herringbone sole'),
-      ('Weekend Canvas','Nimbus','casual',5900,3.9,30,'Washed canvas low-top'),
-      ('FleeceHood Heavy','NorthLoop','apparel',7400,4.5,25,'450gsm brushed fleece hoodie'),
-      ('RainShell 10k','NorthLoop','apparel',15900,4.3,11,'Packable waterproof shell'),
-      ('Merino Crew Sock x3','Summit','apparel',2900,4.6,40,'Odor-resistant merino blend 3-pack'),
-      ('ChefKnife 8in','ForgeWorks','kitchen',9900,4.9,6,'VG-10 steel, full tang'),
-      ('CastIron Skillet 12','ForgeWorks','kitchen',6500,4.8,10,'Pre-seasoned, oven safe');
+      INSERT INTO products (name, brand, category, price_cents, rating, stock, blurb, img) VALUES
+      ('AeroRun Glide 5','Velocity','running',12900,4.6,12,'Daily trainer with plush foam, 8oz', '/img/products/1.jpg'),
+      ('TrailBeast GTX','Summit','outdoor',17900,4.4,7,'Waterproof trail runner, aggressive grip', '/img/products/2.jpg'),
+      ('Cloudstep Classic','Nimbus','casual',8900,4.2,20,'Minimalist leather sneaker', '/img/products/3.jpg'),
+      ('PowerLift Pro','IronCore','gym',13900,4.7,9,'Flat-sole lifting shoe, wide toe box', '/img/products/4.jpg'),
+      ('SprintEdge Carbon','Velocity','running',24900,4.8,4,'Carbon-plated race day shoe', '/img/products/5.jpg'),
+      ('CourtKing 2','Rally','court',10900,4.1,15,'Indoor court shoe with herringbone sole', '/img/products/6.jpg'),
+      ('Weekend Canvas','Nimbus','casual',5900,3.9,30,'Washed canvas low-top', '/img/products/7.jpg'),
+      ('FleeceHood Heavy','NorthLoop','apparel',7400,4.5,25,'450gsm brushed fleece hoodie', '/img/products/8.jpg'),
+      ('RainShell 10k','NorthLoop','apparel',15900,4.3,11,'Packable waterproof shell', '/img/products/9.jpg'),
+      ('Merino Crew Sock x3','Summit','apparel',2900,4.6,40,'Odor-resistant merino blend 3-pack', '/img/products/10.jpg'),
+      ('ChefKnife 8in','ForgeWorks','kitchen',9900,4.9,6,'VG-10 steel, full tang', '/img/products/11.jpg'),
+      ('CastIron Skillet 12','ForgeWorks','kitchen',6500,4.8,10,'Pre-seasoned, oven safe', '/img/products/12.jpg');
+    `)
+    await db.exec(`
+      INSERT INTO reviews (product_id, author, rating, text) VALUES
+      (1,'marathon_mike',5,'Ran 40 miles in week one. Zero break-in period.'),
+      (1,'sana_k',4,'True to size but the toebox runs wide.'),
+      (2,'gregor_h',3,'Grip is amazing, sizing chart lied though - size up.'),
+      (5,'trackdad',5,'My kid dropped 2s off her 1600m time. Worth every cent.'),
+      (7,'priya',4,'Perfect errand sneaker, canvas scuffs fast but that is the look.'),
+      (11,'chef_bear',5,'Came stupid sharp out of the box. Holds an edge.'),
+      (12,'homecook99',5,'My grandmother would approve. Seasoned perfectly.'),
+      (8,'dan_w',2,'Sleeve cuffs are tight if you have forearms.');
     `)
   }
 }

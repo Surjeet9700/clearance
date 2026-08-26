@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { getDB } from '~/db'
-import { getRules, listReceipts, markUndone } from '~/db/rules'
+import { getRules, listReceipts, markUndone, approvalStats, recordApprovalDecision } from '~/db/rules'
 import { handleCheckout } from '~/server/checkout-rest'
 
 // REST surface so the UI talks to the same server-side DB the agent tools use.
@@ -23,8 +23,17 @@ export const Route = createFileRoute('/api/$')({
           const { rows } = await db.query('SELECT * FROM products ORDER BY id')
           return json(rows)
         }
+        if (path.startsWith('/reviews/')) {
+          const pid = Number(path.split('/')[2])
+          const { rows } = await db.query(
+            'SELECT author, rating, text FROM reviews WHERE product_id = $1 ORDER BY id',
+            [pid],
+          )
+          return json(rows)
+        }
         if (path === '/rules') return json(await getRules())
         if (path === '/receipts') return json(await listReceipts())
+        if (path === '/approval-stats') return json(await approvalStats())
         if (path === '/verify') {
           const { verifyChain } = await import('~/server/store')
           return json(await verifyChain())
@@ -64,6 +73,12 @@ export const Route = createFileRoute('/api/$')({
           const b = body as { receipt_id: string }
           const ok = await markUndone(b.receipt_id)
           return json({ ok })
+        }
+
+        if (path === '/approval-decision') {
+          const b = body as { decision: boolean }
+          await recordApprovalDecision(b.decision)
+          return json({ ok: true })
         }
 
         if (path === '/rules-save') {
