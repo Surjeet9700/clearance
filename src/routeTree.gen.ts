@@ -14,7 +14,6 @@ import { Route as CartRouteImport } from './routes/cart'
 import { Route as ReceiptsRouteImport } from './routes/receipts'
 import { Route as RulesRouteImport } from './routes/rules'
 import { Route as ApiSplatRouteImport } from './routes/api/$'
-import { Route as ApiProductsRouteImport } from './routes/api.products'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -41,11 +40,6 @@ const ApiSplatRoute = ApiSplatRouteImport.update({
   path: '/api/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiProductsRoute = ApiProductsRouteImport.update({
-  id: '/api/products',
-  path: '/api/products',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -53,7 +47,6 @@ export interface FileRoutesByFullPath {
   '/receipts': typeof ReceiptsRoute
   '/rules': typeof RulesRoute
   '/api/$': typeof ApiSplatRoute
-  '/api/products': typeof ApiProductsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -61,7 +54,6 @@ export interface FileRoutesByTo {
   '/receipts': typeof ReceiptsRoute
   '/rules': typeof RulesRoute
   '/api/$': typeof ApiSplatRoute
-  '/api/products': typeof ApiProductsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -70,21 +62,13 @@ export interface FileRoutesById {
   '/receipts': typeof ReceiptsRoute
   '/rules': typeof RulesRoute
   '/api/$': typeof ApiSplatRoute
-  '/api/products': typeof ApiProductsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/cart' | '/receipts' | '/rules' | '/api/$' | '/api/products'
+  fullPaths: '/' | '/cart' | '/receipts' | '/rules' | '/api/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/cart' | '/receipts' | '/rules' | '/api/$' | '/api/products'
-  id:
-    | '__root__'
-    | '/'
-    | '/cart'
-    | '/receipts'
-    | '/rules'
-    | '/api/$'
-    | '/api/products'
+  to: '/' | '/cart' | '/receipts' | '/rules' | '/api/$'
+  id: '__root__' | '/' | '/cart' | '/receipts' | '/rules' | '/api/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -93,7 +77,6 @@ export interface RootRouteChildren {
   ReceiptsRoute: typeof ReceiptsRoute
   RulesRoute: typeof RulesRoute
   ApiSplatRoute: typeof ApiSplatRoute
-  ApiProductsRoute: typeof ApiProductsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -133,13 +116,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/products': {
-      id: '/api/products'
-      path: '/api/products'
-      fullPath: '/api/products'
-      preLoaderRoute: typeof ApiProductsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -149,7 +125,6 @@ const rootRouteChildren: RootRouteChildren = {
   ReceiptsRoute: ReceiptsRoute,
   RulesRoute: RulesRoute,
   ApiSplatRoute: ApiSplatRoute,
-  ApiProductsRoute: ApiProductsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
