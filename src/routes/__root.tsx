@@ -45,6 +45,23 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const [cartCount, setCartCount] = React.useState(0)
+
+  React.useEffect(() => {
+    const load = () =>
+      fetch('/api/cart')
+        .then(r => r.json())
+        .then((lines: { qty: number }[]) => setCartCount(lines.reduce((s, l) => s + l.qty, 0)))
+        .catch(() => {})
+    load()
+    window.addEventListener('cart-changed', load)
+    const t = setInterval(load, 8000)
+    return () => {
+      window.removeEventListener('cart-changed', load)
+      clearInterval(t)
+    }
+  }, [])
+
   return (
     <html lang="en">
       <head>
@@ -59,9 +76,19 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             </Link>
             <nav className="flex items-center gap-4 text-sm text-neutral-600 dark:text-neutral-400">
               <Link to="/" className="hover:text-emerald-600">Store</Link>
-              <Link to="/cart" className="hover:text-emerald-600">Cart</Link>
               <Link to="/rules" className="hover:text-emerald-600">Rules</Link>
               <Link to="/receipts" className="hover:text-emerald-600">Receipts</Link>
+              <Link
+                to="/cart"
+                className="relative rounded-md border border-neutral-300 px-2.5 py-1 hover:border-emerald-500 hover:text-emerald-600 dark:border-neutral-700"
+              >
+                🛒 Cart
+                {cartCount > 0 && (
+                  <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1 text-[11px] font-bold text-white">
+                    {cartCount}
+                  </span>
+                )}
+              </Link>
             </nav>
           </div>
         </header>

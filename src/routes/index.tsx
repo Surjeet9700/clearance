@@ -20,6 +20,7 @@ type Product = {
 function Store() {
   const [products, setProducts] = React.useState<Product[] | null>(null)
   const [adding, setAdding] = React.useState<number | null>(null)
+  const [added, setAdded] = React.useState<number | null>(null)
   const [reviewsFor, setReviewsFor] = React.useState<number | null>(null)
   const [reviews, setReviews] = React.useState<{ author: string; rating: number; text: string }[]>([])
 
@@ -34,13 +35,18 @@ function Store() {
 
   const add = async (id: number) => {
     setAdding(id)
-    await fetch('/api/cart', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ product_id: id }),
-    })
-    setAdding(null)
-    window.dispatchEvent(new CustomEvent('cart-changed'))
+    try {
+      await fetch('/api/cart', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ product_id: id }),
+      })
+      setAdded(id)
+      window.dispatchEvent(new CustomEvent('cart-changed'))
+      setTimeout(() => setAdded(cur => (cur === id ? null : cur)), 2000)
+    } finally {
+      setAdding(null)
+    }
   }
 
   const toggleReviews = async (id: number) => {
@@ -105,10 +111,18 @@ function Store() {
                 )}
                 <button
                   onClick={() => add(p.id)}
-                  disabled={adding === p.id || p.stock < 1}
-                  className="mt-3 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40"
+                  disabled={adding === p.id || added === p.id || p.stock < 1}
+                  className={`mt-3 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-100 ${
+                    added === p.id ? 'bg-emerald-500' : 'bg-emerald-600 hover:bg-emerald-500'
+                  } disabled:opacity-40`}
                 >
-                  {p.stock < 1 ? 'Out of stock' : adding === p.id ? 'Adding…' : 'Add to cart'}
+                  {p.stock < 1
+                    ? 'Out of stock'
+                    : adding === p.id
+                      ? 'Adding…'
+                      : added === p.id
+                        ? '✓ Added to cart'
+                        : 'Add to cart'}
                 </button>
               </div>
             </div>
