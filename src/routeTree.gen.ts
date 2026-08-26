@@ -15,7 +15,6 @@ import { Route as ReceiptsRouteImport } from './routes/receipts'
 import { Route as RulesRouteImport } from './routes/rules'
 import { Route as ApiSplatRouteImport } from './routes/api/$'
 import { Route as ApiProductsRouteImport } from './routes/api.products'
-import { Route as ApiTestGateRouteImport } from './routes/api.test-gate'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -47,11 +46,6 @@ const ApiProductsRoute = ApiProductsRouteImport.update({
   path: '/api/products',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTestGateRoute = ApiTestGateRouteImport.update({
-  id: '/api/test-gate',
-  path: '/api/test-gate',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -60,7 +54,6 @@ export interface FileRoutesByFullPath {
   '/rules': typeof RulesRoute
   '/api/$': typeof ApiSplatRoute
   '/api/products': typeof ApiProductsRoute
-  '/api/test-gate': typeof ApiTestGateRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -69,7 +62,6 @@ export interface FileRoutesByTo {
   '/rules': typeof RulesRoute
   '/api/$': typeof ApiSplatRoute
   '/api/products': typeof ApiProductsRoute
-  '/api/test-gate': typeof ApiTestGateRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -79,27 +71,12 @@ export interface FileRoutesById {
   '/rules': typeof RulesRoute
   '/api/$': typeof ApiSplatRoute
   '/api/products': typeof ApiProductsRoute
-  '/api/test-gate': typeof ApiTestGateRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/cart'
-    | '/receipts'
-    | '/rules'
-    | '/api/$'
-    | '/api/products'
-    | '/api/test-gate'
+  fullPaths: '/' | '/cart' | '/receipts' | '/rules' | '/api/$' | '/api/products'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/cart'
-    | '/receipts'
-    | '/rules'
-    | '/api/$'
-    | '/api/products'
-    | '/api/test-gate'
+  to: '/' | '/cart' | '/receipts' | '/rules' | '/api/$' | '/api/products'
   id:
     | '__root__'
     | '/'
@@ -108,7 +85,6 @@ export interface FileRouteTypes {
     | '/rules'
     | '/api/$'
     | '/api/products'
-    | '/api/test-gate'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -118,7 +94,6 @@ export interface RootRouteChildren {
   RulesRoute: typeof RulesRoute
   ApiSplatRoute: typeof ApiSplatRoute
   ApiProductsRoute: typeof ApiProductsRoute
-  ApiTestGateRoute: typeof ApiTestGateRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -165,13 +140,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProductsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/test-gate': {
-      id: '/api/test-gate'
-      path: '/api/test-gate'
-      fullPath: '/api/test-gate'
-      preLoaderRoute: typeof ApiTestGateRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -182,7 +150,6 @@ const rootRouteChildren: RootRouteChildren = {
   RulesRoute: RulesRoute,
   ApiSplatRoute: ApiSplatRoute,
   ApiProductsRoute: ApiProductsRoute,
-  ApiTestGateRoute: ApiTestGateRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
