@@ -104,6 +104,12 @@ export const Route = createFileRoute('/api/$')({
           await db.exec('DELETE FROM cart_items')
           return json({ ok: true })
         }
+        // remove a single product line: DELETE /api/cart/<id>
+        const m = path.match(/^\/cart\/(\d+)$/)
+        if (m) {
+          await db.query('DELETE FROM cart_items WHERE product_id = $1', [Number(m[1])])
+          return json({ ok: true })
+        }
         return json({ error: 'Not found' }, 404)
       },
     },

@@ -34,24 +34,16 @@ function Cart() {
 
   const total = lines.reduce((s, l) => s + l.price_cents * l.qty, 0)
   const remove = async (product_id: number) => {
-    // one line per product in this simple cart model: clear and rebuild is overkill,
-    // so delete by clearing that product's rows via the API's per-product path not exposed;
-    // simplest correct behavior: remove all qty of that product
-    await fetch('/api/cart', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ product_id }),
-    }).catch(() => {})
-    await fetch('/api/cart', { method: 'DELETE' }).catch(() => {})
-    // re-add remaining lines minus removed one
-    for (const l of lines.filter(x => x.product_id !== product_id)) {
-      await fetch('/api/cart', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ product_id: l.product_id, qty: l.qty }),
-      })
+    if (busy) return
+    setBusy(true)
+    // optimistic: drop the line immediately so rapid clicks can't race on stale state
+    setLines(cur => cur.filter(l => l.product_id !== product_id))
+    try {
+      await fetch(`/api/cart/${product_id}`, { method: 'DELETE' })
+    } finally {
+      setBusy(false)
+      load()
     }
-    load()
   }
 
   return (
