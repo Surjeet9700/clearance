@@ -13,6 +13,7 @@
     "@electric-sql/pglite": "^0.5.7",
     "@mcp-b/global": "^5.0.1",
     "@mcp-b/react-webmcp": "^5.0.1",
+    "@netlify/blobs": "^11.0.1",
     "@tanstack/react-router": "^1.170.32",
     "@tanstack/react-router-devtools": "^1.167.1",
     "@tanstack/react-start": "^1.168.49",

@@ -1,4 +1,4 @@
-import { getDB, sha256, type RuleSet, type Receipt } from './index'
+import { getDB, sha256, saveDB, type RuleSet, type Receipt } from './index'
 
 export const DEFAULT_RULES: RuleSet = {
   balance_cents: 50000,
@@ -13,12 +13,12 @@ export const DEFAULT_RULES: RuleSet = {
 const RULES_KEY = 'rules'
 
 async function readRules(db: Awaited<ReturnType<typeof getDB>>): Promise<RuleSet> {
-  const { rows } = await db.query<{ v: string }>('SELECT v FROM kv WHERE k = $1', [RULES_KEY])
-  if (!rows[0]) {
-    await db.query('INSERT INTO kv (k, v) VALUES ($1, $2)', [RULES_KEY, JSON.stringify(DEFAULT_RULES)])
-    return DEFAULT_RULES
+  const v = db.kv[RULES_KEY]
+  if (!v) {
+    db.kv[RULES_KEY] = JSON.stringify(DEFAULT_RULES)
+    return { ...DEFAULT_RULES }
   }
-  return JSON.parse(rows[0].v) as RuleSet
+  return JSON.parse(v) as RuleSet
 }
 
 export async function getRules(): Promise<RuleSet> {
@@ -30,7 +30,8 @@ export async function setRules(patch: Partial<Omit<RuleSet, 'spent_this_month_ce
   const db = await getDB()
   const cur = await readRules(db)
   const next: RuleSet = { ...cur, ...patch }
-  await db.query('UPDATE kv SET v = $2 WHERE k = $1', [RULES_KEY, JSON.stringify(next)])
+  db.kv[RULES_KEY] = JSON.stringify(next)
+  await saveDB()
   await appendReceipt({
     kind: 'rule_change',
     item_ids: [],
@@ -43,42 +44,35 @@ export async function setRules(patch: Partial<Omit<RuleSet, 'spent_this_month_ce
 }
 
 // ---- rubber-stamp guard (Lee & See calibrated trust; arXiv 2605.19151) ----
-// If the human approves nearly everything and never undoes, approvals are becoming
-// automatic motor behavior - the gate stops protecting anyone. We surface the
-// approve-rate so the UI can inject friction before that happens.
 export type ApprovalStats = {
   total: number
   approved: number
   rejected: number
   undos: number
-  approve_rate: number // 0..1 over decided cards; 1 = rubber-stamping risk
+  approve_rate: number
 }
 
 export async function approvalStats(): Promise<ApprovalStats> {
   const db = await getDB()
-  const { rows } = await db.query<{ v: string }>("SELECT v FROM kv WHERE k LIKE 'approval:%'")
+  const approvals = Object.entries(db.kv)
+    .filter(([k]) => k.startsWith('approval:'))
+    .map(([, v]) => JSON.parse(v) as { decision: boolean })
   let approved = 0, rejected = 0, undos = 0
-  for (const r of rows) {
-    const a = JSON.parse(r.v) as { decision: boolean }
+  for (const a of approvals) {
     if (a.decision) approved++
     else rejected++
   }
   const recs = await listReceipts(100)
   for (const r of recs) if (r.kind === 'undo' && r.reasoning?.includes('Human reversed')) undos++
   const total = approved + rejected
-  return {
-    total,
-    approved,
-    rejected,
-    undos,
-    approve_rate: total === 0 ? 0 : approved / total,
-  }
+  return { total, approved, rejected, undos, approve_rate: total === 0 ? 0 : approved / total }
 }
 
 export async function recordApprovalDecision(decision: boolean): Promise<void> {
   const db = await getDB()
   const id = `approval:${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-  await db.query('INSERT INTO kv (k, v) VALUES ($1, $2)', [id, JSON.stringify({ decision, ts: Date.now() })])
+  db.setKV(id, JSON.stringify({ decision, ts: Date.now() }))
+  await saveDB()
 }
 
 // ---- The decision engine. Returns what the tool layer acts on. ----
@@ -97,11 +91,7 @@ export async function evaluatePurchase(opts: {
   const blockedBrand = opts.brands.find(b => rules.blocked_merchants.includes(b))
   if (blockedBrand) {
     return {
-      verdict: {
-        action: 'blocked',
-        rule: `blocked_merchants includes ${blockedBrand}`,
-        reason: `${blockedBrand} is on your blocked merchants list`,
-      },
+      verdict: { action: 'blocked', rule: `blocked_merchants includes ${blockedBrand}`, reason: `${blockedBrand} is on your blocked merchants list` },
       rules,
     }
   }
@@ -110,11 +100,7 @@ export async function evaluatePurchase(opts: {
     const badCat = opts.categories.find(c => !rules.allowed_categories!.includes(c))
     if (badCat) {
       return {
-        verdict: {
-          action: 'blocked',
-          rule: 'allowed_categories whitelist',
-          reason: `Category "${badCat}" is not in your allowed categories (${rules.allowed_categories.join(', ')})`,
-        },
+        verdict: { action: 'blocked', rule: 'allowed_categories whitelist', reason: `Category "${badCat}" is not in your allowed categories (${rules.allowed_categories.join(', ')})` },
         rules,
       }
     }
@@ -155,58 +141,47 @@ export async function evaluatePurchase(opts: {
 // ---- receipts: hash-chained so judges can verify tamper-evidence ----
 export async function appendReceipt(r: Omit<Receipt, 'id' | 'ts' | 'prev_hash' | 'hash' | 'undone'>): Promise<Receipt> {
   const db = await getDB()
-  const last = await lastReceipt()
+  const all = db.getReceipts()
+  const last = all.length ? all[all.length - 1] : null
   const prevHash = last?.hash ?? 'GENESIS'
   const ts = Date.now()
   const id = `r_${ts}_${Math.random().toString(36).slice(2, 8)}`
   const payload = JSON.stringify({ ...r, id, ts, prev_hash: prevHash })
   const hash = await sha256(payload)
   const receipt: Receipt = { ...r, id, ts, prev_hash: prevHash, hash, undone: false }
-  await db.query(
-    'INSERT INTO kv (k, v) VALUES ($1, $2)',
-    [`receipt:${id}`, JSON.stringify(receipt)],
-  )
+  db.addReceipt(receipt)
+  await saveDB()
   return receipt
 }
 
 export async function lastReceipt(): Promise<Receipt | null> {
   const db = await getDB()
-  const { rows } = await db.query<{ v: string }>(
-    "SELECT v FROM kv WHERE k LIKE 'receipt:%'",
-  )
-  const all = rows.map(r => JSON.parse(r.v) as Receipt).sort((a, b) => b.ts - a.ts)
-  return all[0] ?? null
+  const all = db.getReceipts()
+  return all.length ? all[all.length - 1] : null
 }
 
 export async function listReceipts(limit = 50): Promise<Receipt[]> {
   const db = await getDB()
-  const { rows } = await db.query<{ v: string }>(
-    "SELECT v FROM kv WHERE k LIKE 'receipt:%'",
-  )
-  return rows
-    .map(r => JSON.parse(r.v) as Receipt)
-    .sort((a, b) => b.ts - a.ts)
-    .slice(0, limit)
+  return db.getReceipts().slice(-limit).reverse()
 }
 
 export async function markUndone(receiptId: string): Promise<boolean> {
   const db = await getDB()
-  const { rows } = await db.query<{ v: string }>('SELECT v FROM kv WHERE k = $1', [
-    `receipt:${receiptId}`,
-  ])
-  if (!rows[0]) return false
-  const r = JSON.parse(rows[0].v) as Receipt
+  const all = db.getReceipts()
+  const idx = all.findIndex(r => r.id === receiptId)
+  if (idx === -1) return false
+  const r = all[idx]
   if (r.kind !== 'purchase') return false
-  // refund the envelope + restore stock happens in caller via spendBookkeeping
   r.undone = true
-  await db.query('UPDATE kv SET v = $2 WHERE k = $1', [`receipt:${receiptId}`, JSON.stringify(r)])
+  all[idx] = r
   const rules = await readRules(db)
   rules.spent_this_month_cents = Math.max(0, rules.spent_this_month_cents - r.total_cents)
-  await db.query('UPDATE kv SET v = $2 WHERE k = $1', [RULES_KEY, JSON.stringify(rules)])
+  db.kv[RULES_KEY] = JSON.stringify(rules)
   for (const pid of r.item_ids) {
-    await db.query('UPDATE products SET stock = stock + 1 WHERE id = $1', [pid])
+    const p = db.products.find(x => x.id === pid)
+    if (p) p.stock += 1
   }
-  await db.exec('DELETE FROM cart_items')
+  db.clearCart()
   await appendReceipt({
     kind: 'undo',
     item_ids: r.item_ids,
@@ -215,5 +190,6 @@ export async function markUndone(receiptId: string): Promise<boolean> {
     rule_fired: null,
     reasoning: `Human reversed purchase ${receiptId} within the reversal window`,
   })
+  await saveDB()
   return true
 }

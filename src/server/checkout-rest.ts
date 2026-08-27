@@ -1,5 +1,6 @@
-import { getDB } from '~/db'
-import { evaluatePurchase, appendReceipt, getRules } from '~/db/rules'
+import { getDB, saveDB } from '~/db'
+import { evaluatePurchase, appendReceipt, getRules, setRules } from '~/db/rules'
+import type { RuleSet } from '~/db'
 
 // REST-facing checkout that runs the identical governance gate as the agent tool path.
 const processedKeys = new Set<string>()
@@ -16,17 +17,10 @@ export async function handleCheckout(input: CheckoutInput) {
   }
 
   const db = await getDB()
-  const { rows: lines } = await db.query<{
-    product_id: number
-    qty: number
-    name: string
-    brand: string
-    category: string
-    price_cents: number
-  }>(
-    `SELECT ci.product_id, ci.qty, p.name, p.brand, p.category, p.price_cents
-     FROM cart_items ci JOIN products p ON p.id = ci.product_id ORDER BY ci.id`,
-  )
+  const lines = db.cart.map(ci => {
+    const p = db.products.find(x => x.id === ci.product_id)!
+    return { product_id: p.id, qty: ci.qty, name: p.name, brand: p.brand, category: p.category, price_cents: p.price_cents }
+  })
   if (lines.length === 0) return { status: 'empty', message: 'Cart is empty.' }
 
   const total = lines.reduce((s, l) => s + l.price_cents * l.qty, 0)
@@ -58,18 +52,17 @@ export async function handleCheckout(input: CheckoutInput) {
   }
 
   for (const l of lines) {
-    await db.query('UPDATE products SET stock = GREATEST(0, stock - $1) WHERE id = $2', [l.qty, l.product_id])
+    const p = db.products.find(x => x.id === l.product_id)
+    if (p) p.stock = Math.max(0, p.stock - l.qty)
   }
-  await db.exec('DELETE FROM cart_items')
+  db.clearCart()
 
   const rules = await getRules()
-  // persist spent increment without emitting a rule_change receipt
   const nextSpent = rules.spent_this_month_cents + total
-  await db.query(
-    `INSERT INTO kv (k, v) VALUES ('rules', $1)
-     ON CONFLICT (k) DO UPDATE SET v = $1`,
-    [JSON.stringify({ ...rules, spent_this_month_cents: nextSpent })],
-  )
+  // bump spent without emitting a rule_change receipt
+  const cur = JSON.parse(db.kv['rules']) as RuleSet
+  db.kv['rules'] = JSON.stringify({ ...cur, spent_this_month_cents: nextSpent })
+  await saveDB()
 
   const receipt = await appendReceipt({
     kind: 'purchase',

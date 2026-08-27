@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { getDB } from '~/db'
+import { getDB, saveDB } from '~/db'
 import { getRules, listReceipts, markUndone, approvalStats, recordApprovalDecision } from '~/db/rules'
 import { handleCheckout } from '~/server/checkout-rest'
 
@@ -20,16 +20,11 @@ export const Route = createFileRoute('/api/$')({
         const db = await getDB()
 
         if (path === '/products') {
-          const { rows } = await db.query('SELECT * FROM products ORDER BY id')
-          return json(rows)
+          return json(db.products)
         }
         if (path.startsWith('/reviews/')) {
           const pid = Number(path.split('/')[2])
-          const { rows } = await db.query(
-            'SELECT author, rating, text FROM reviews WHERE product_id = $1 ORDER BY id',
-            [pid],
-          )
-          return json(rows)
+          return json(db.reviews.filter(r => r.product_id === pid))
         }
         if (path === '/rules') return json(await getRules())
         if (path === '/receipts') return json(await listReceipts())
@@ -39,11 +34,12 @@ export const Route = createFileRoute('/api/$')({
           return json(await verifyChain())
         }
         if (path === '/cart') {
-          const { rows } = await db.query(
-            `SELECT ci.product_id, ci.qty, p.name, p.brand, p.category, p.price_cents
-             FROM cart_items ci JOIN products p ON p.id = ci.product_id ORDER BY ci.id`,
+          return json(
+            db.cart.map(ci => {
+              const p = db.products.find(x => x.id === ci.product_id)!
+              return { product_id: p.id, qty: ci.qty, name: p.name, brand: p.brand, category: p.category, price_cents: p.price_cents }
+            }),
           )
-          return json(rows)
         }
         return json({ error: 'Not found' }, 404)
       },
@@ -54,19 +50,16 @@ export const Route = createFileRoute('/api/$')({
 
         if (path === '/cart') {
           const b = body as { product_id: number; qty?: number }
-          const { rows: prod } = await db.query<{ stock: number }>('SELECT stock FROM products WHERE id = $1', [b.product_id])
-          if (!prod[0]) return json({ error: 'Product not found' }, 404)
-          await db.query(
-            `INSERT INTO cart_items (product_id, qty)
-             SELECT $1, $2
-             WHERE NOT EXISTS (SELECT 1 FROM cart_items WHERE product_id = $1)`,
-            [b.product_id, b.qty ?? 1],
+          const prod = db.products.find(x => x.id === b.product_id)
+          if (!prod) return json({ error: 'Product not found' }, 404)
+          db.addToCart(b.product_id, b.qty ?? 1)
+          await saveDB()
+          return json(
+            db.cart.map(ci => {
+              const p = db.products.find(x => x.id === ci.product_id)!
+              return { product_id: p.id, qty: ci.qty, name: p.name, brand: p.brand, category: p.category, price_cents: p.price_cents }
+            }),
           )
-          const { rows } = await db.query(
-            `SELECT ci.product_id, ci.qty, p.name, p.brand, p.category, p.price_cents
-             FROM cart_items ci JOIN products p ON p.id = ci.product_id ORDER BY ci.id`,
-          )
-          return json(rows)
         }
 
         if (path === '/undo') {
@@ -101,13 +94,15 @@ export const Route = createFileRoute('/api/$')({
         const path = new URL(request.url).pathname.replace(/^\/api/, '')
         const db = await getDB()
         if (path === '/cart') {
-          await db.exec('DELETE FROM cart_items')
+          db.clearCart()
+          await saveDB()
           return json({ ok: true })
         }
         // remove a single product line: DELETE /api/cart/<id>
         const m = path.match(/^\/cart\/(\d+)$/)
         if (m) {
-          await db.query('DELETE FROM cart_items WHERE product_id = $1', [Number(m[1])])
+          db.removeFromCart(Number(m[1]))
+          await saveDB()
           return json({ ok: true })
         }
         return json({ error: 'Not found' }, 404)
